@@ -516,10 +516,10 @@ export class Player {
         onUpdate?.();
         try {
           const chapterName = chapterLabel(book.lang, i + 1, ch.title, ch.pages);
-          // Con clave: Gemini. Sin clave: la IA chiquita del celular (3 frases: principio, medio y final).
-          const summary = this.aiKey
-            ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: isCur })
-            : await localAi.summarize(this.paras.slice(ch.start, upto), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 3 });
+          // Siempre primero la IA propia del celular (3 frases: principio, medio y final).
+          const summary = this.aiLocal || !this.aiKey
+            ? await localAi.summarize(this.paras.slice(ch.start, upto), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 3 })
+            : await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: isCur });
           book.aiSummaries = { ...(book.aiSummaries || {}), [i]: { text: summary, upto, full: !isCur } };
           updateBook(book.id, { aiSummaries: book.aiSummaries });
         } catch (e) {
@@ -553,9 +553,9 @@ export class Player {
         onUpdate?.();
         try {
           const chapterName = book.lang === 'en' ? 'a passage' : 'un fragmento';
-          sec.ai = this.aiKey
-            ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: false })
-            : await localAi.summarize(this.paras.slice(sec.start, sec.end), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 1 });
+          sec.ai = this.aiLocal || !this.aiKey
+            ? await localAi.summarize(this.paras.slice(sec.start, sec.end), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 1 })
+            : await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: false });
           book.aiSections = { ...(book.aiSections || {}), [k]: sec.ai };
           updateBook(book.id, { aiSections: book.aiSections });
         } catch (e) {

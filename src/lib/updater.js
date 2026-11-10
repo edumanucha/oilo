@@ -7,7 +7,13 @@ let applyUpdate = null;
 let pending = false;
 let reg = null;
 const listeners = new Set();
-export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : 'dev';
+// Fecha y hora de publicación, mostrada en la hora local del celular (antes salía en UTC y confundía).
+export const APP_VERSION = (() => {
+  if (typeof __APP_VERSION__ === 'undefined') return 'dev';
+  const d = new Date(__APP_VERSION__);
+  if (isNaN(d)) return __APP_VERSION__;
+  return d.toLocaleString(navigator.language || 'es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+})();
 
 function tryApply() {
   if (!pending || !applyUpdate) return;

@@ -339,6 +339,7 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
         <button className="icon-btn" onClick={onBack} aria-label={t('back')}><Icon name="back" /></button>
         <h2>{t('whoReads')}</h2>
       </div>
+      <span className="muted tiny" style={{ marginTop: -8 }}>{t('version')}: {APP_VERSION}</span>
       <div className="tog">
         <button className={lang === 'es' ? 'on' : ''} onClick={() => setLang('es')}>{t('spanish')}</button>
         <button className={lang === 'en' ? 'on' : ''} onClick={() => setLang('en')}>{t('english')}</button>
@@ -348,10 +349,6 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
       <input className="scrub" type="range" min="0.5" max="3" step="0.05" value={settings.rate} onChange={(e) => setSettings({ rate: Number(e.target.value) })} />
       <div id="ai-panel" style={{ scrollMarginTop: 70 }}>
         <LocalAiPanel t={t} settings={settings} setSettings={setSettings} />
-        <details className="ai-adv" open={settings.aiKey ? true : undefined}>
-          <summary>{t('aiGeminiOptional')}</summary>
-          <AiKeyPanel t={t} settings={settings} setSettings={setSettings} />
-        </details>
       </div>
       <div className="h4">{t('theme')}</div>
       <div className="tog">
