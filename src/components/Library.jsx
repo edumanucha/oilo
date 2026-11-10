@@ -3,6 +3,7 @@ import Cover from './Cover.jsx';
 import Icon from './Icon.jsx';
 import { formatDuration } from '../lib/text.js';
 import { chapterLabel } from '../lib/i18n.js';
+import InstallButton from './InstallButton.jsx';
 
 function greeting(t) {
   const h = new Date().getHours();
@@ -41,6 +42,8 @@ export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, on
           <button className="icon-btn" onClick={onSettings} aria-label={t('settings')}><Icon name="settings" /></button>
         </div>
       </div>
+
+      <InstallButton t={t} />
 
       {cur && (
         <div className="cont" onClick={() => onOpen(cur.id)} role="button">
