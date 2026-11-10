@@ -3,7 +3,8 @@
 import { splitSentences, summarize, summarizeWithPos, keyNames } from './text.js';
 import { saveProgress, updateBook, getAudio, putAudio, audioKeys, deleteAudio } from './db.js';
 import { systemVoices } from './voices.js';
-import { announce } from './i18n.js';
+import { announce, chapterLabel } from './i18n.js';
+import { summarizeChapter } from './ai.js';
 
 // Cuántas frases se generan por adelantado con la voz natural.
 // Más margen = sigue sonando aunque el celular bloqueado frene un poco la app.
@@ -204,7 +205,8 @@ export class Player {
     this._initPrep();
   }
 
-  configure({ rate, engine, piperVoice, systemVoice, stVoice }) {
+  configure({ rate, engine, piperVoice, systemVoice, stVoice, aiKey }) {
+    if (aiKey !== undefined) this.aiKey = (aiKey || '').trim();
     let voiceChanged = false;
     if (rate !== undefined) {
       this.rate = rate;
@@ -489,6 +491,50 @@ export class Player {
     }
     return { chapterNumber: idx + 1, items };
   }
+  /* ---------- resúmenes con IA (Gemini) por capítulo ---------- */
+  // Resume los capítulos hasta 'upTo' que todavía no tengan resumen (el actual, solo hasta donde vas).
+  async ensureAiSummaries(upTo, onUpdate) {
+    if (!this.aiKey || !this.book || this._aiRunning) return;
+    this._aiRunning = true;
+    this.aiError = null;
+    const book = this.book;
+    const cur = this.chapterIndexOf(this.cursor?.p || 0);
+    try {
+      for (let i = 0; i <= Math.min(upTo, book.chapters.length - 1); i++) {
+        if (this.book !== book) break;
+        const ch = book.chapters[i];
+        const isCur = i === cur;
+        const upto = isCur ? this.cursor.p : ch.end;
+        if (upto <= ch.start) continue;
+        const have = book.aiSummaries?.[i];
+        if (have && (have.full || (isCur && have.upto >= upto - 1))) continue;
+        const text = this.paras.slice(ch.start, upto).join('\n\n');
+        if (text.length < 200) continue;
+        this.aiBusy = i;
+        onUpdate?.();
+        try {
+          const summary = await summarizeChapter(this.aiKey, {
+            text,
+            lang: book.lang,
+            bookTitle: book.title,
+            chapterName: chapterLabel(book.lang, i + 1, ch.title, ch.pages),
+            partial: isCur,
+          });
+          book.aiSummaries = { ...(book.aiSummaries || {}), [i]: { text: summary, upto, full: !isCur } };
+          updateBook(book.id, { aiSummaries: book.aiSummaries });
+        } catch (e) {
+          this.aiError = e.code || 'other';
+          if (['key', 'quota', 'network'].includes(this.aiError)) break;
+        }
+        onUpdate?.();
+      }
+    } finally {
+      this.aiBusy = null;
+      this._aiRunning = false;
+      onUpdate?.();
+    }
+  }
+
   playRecap(lines) {
     this.token++;
     this.audio.pause();
@@ -769,6 +815,7 @@ export class Player {
       const idx = this.chapterIndexOf(next.p);
       this._cleanupChapters(idx);
       this.prepare([idx, idx + 1]);
+      if (this.aiKey && idx > 0) this.ensureAiSummaries(idx - 1);
     }
     if (wasEnd && this.sleepEndOfChapter) {
       this.sleepEndOfChapter = false;

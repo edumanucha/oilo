@@ -4,6 +4,63 @@ import { PIPER_VOICES, SUPERTONIC_VOICES, SUPERTONIC_MB, systemVoices, waitForSy
 import { player } from '../lib/player.js';
 import { makeT } from '../lib/i18n.js';
 import { APP_VERSION, checkForUpdate } from '../lib/updater.js';
+import { testKey } from '../lib/ai.js';
+
+// Resúmenes con IA: el usuario pega su clave gratuita de Google AI Studio.
+function AiKeyPanel({ t, settings, setSettings }) {
+  const [draft, setDraft] = useState('');
+  const [status, setStatus] = useState(null); // null | 'testing' | 'ok' | código de error
+  const hasKey = !!settings.aiKey;
+
+  const save = async () => {
+    const key = draft.trim();
+    if (!key) return;
+    setStatus('testing');
+    try {
+      await testKey(key);
+      setSettings({ aiKey: key });
+      setDraft('');
+      setStatus('ok');
+    } catch (e) {
+      setStatus(e.code || 'other');
+    }
+  };
+
+  return (
+    <div>
+      <div className="h4">{t('aiTitle')}</div>
+      <p className="muted" style={{ margin: '6px 0' }}>{t('aiExplain')}</p>
+      {hasKey ? (
+        <div className="voice on">
+          <div className="who">
+            <b>{t('aiActive')}</b>
+            <span>{t('aiKeySaved', { end: settings.aiKey.slice(-4) })}</span>
+          </div>
+          <button className="use" onClick={() => { setSettings({ aiKey: '' }); setStatus(null); }}>{t('aiRemove')}</button>
+        </div>
+      ) : (
+        <>
+          <ol className="recap" style={{ fontSize: 15 }}>
+            <li><span>{t('aiStep1')} <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer">aistudio.google.com/apikey</a></span></li>
+            <li><span>{t('aiStep2')}</span></li>
+            <li><span>{t('aiStep3')}</span></li>
+          </ol>
+          <form className="row" onSubmit={(e) => { e.preventDefault(); save(); }}>
+            <label className="field" style={{ flex: 1 }}>
+              <input type="password" autoComplete="off" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t('aiPlaceholder')} aria-label={t('aiPlaceholder')} />
+            </label>
+            <button className="btn primary" type="submit" disabled={!draft.trim() || status === 'testing'}>
+              {status === 'testing' ? <span className="spin" /> : <Icon name="check" />} {t('aiSave')}
+            </button>
+          </form>
+        </>
+      )}
+      {status === 'ok' && <p className="muted">{t('aiOk')}</p>}
+      {status && !['ok', 'testing'].includes(status) && <p className="error">{t('aiErr_' + status)}</p>}
+      <p className="muted tiny">{t('aiPrivacy')}</p>
+    </div>
+  );
+}
 
 const piperLib = () => import('@mintplex-labs/piper-tts-web');
 
@@ -225,6 +282,7 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
       <VoicePanel t={t} lang={lang} settings={settings} setSettings={setSettings} />
       <div className="h4">{t('speed')} · {String(settings.rate).replace('.', ',')}×</div>
       <input className="scrub" type="range" min="0.5" max="3" step="0.05" value={settings.rate} onChange={(e) => setSettings({ rate: Number(e.target.value) })} />
+      <AiKeyPanel t={t} settings={settings} setSettings={setSettings} />
       <div className="h4">{t('theme')}</div>
       <div className="tog">
         {['auto', 'light', 'dark'].map((th) => (

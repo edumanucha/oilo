@@ -27,6 +27,12 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
   };
   const [recapTab, setRecapTab] = useState('last');
   const [openSec, setOpenSec] = useState(null);
+  const [, setAiTick] = useState(0);
+  // Al abrir "Todo hasta acá", pedimos a Gemini los resúmenes que falten (si hay clave).
+  useEffect(() => {
+    if (sheet !== 'recap' || recapTab !== 'all' || !settings.aiKey || !recapAll) return;
+    player.ensureAiSummaries(recapAll.chapterNumber - 1, () => setAiTick((n) => n + 1));
+  }, [sheet, recapTab, settings.aiKey]);
   const [listTab, setListTab] = useState('chapters');
   const [marked, setMarked] = useState(false);
   const mark = () => { player.addBookmark(); setMarked(true); setTimeout(() => setMarked(false), 1800); };
@@ -301,13 +307,15 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                 ) : recapAll.items.length ? (
                   <>
                     <span className="muted">{t('recapAllLead', { title: book.title, n: Math.max(0, recapAll.chapterNumber - 1), total: book.chapters.length })}</span>
+                    {!settings.aiKey && <span className="postit" style={{ fontSize: 17 }}>{t('aiNoKeyHint')}</span>}
+                    {settings.aiKey && player.aiError && <p className="error">{t('aiErr_' + player.aiError)}</p>}
                     <div className="secs">
                       {recapAll.items.map((it) => (
                         <Section
                           key={it.n}
                           n={it.n}
-                          kicker={it.title && !it.pages ? it.title : null}
-                          title={it.names?.length ? it.names.join(' · ') : chapterLabel(book.lang, it.n, it.title, it.pages)}
+                          kicker={chapterLabel(book.lang, it.n, it.title, it.pages) + (player.aiBusy === it.n - 1 ? ' · ' + t('aiSummarizing') : '')}
+                          title={book.aiSummaries?.[it.n - 1]?.text || (it.names?.length ? it.names.join(' · ') : chapterLabel(book.lang, it.n, it.title, it.pages))}
                           open={openSec === 'a' + it.n}
                           onToggle={() => setOpenSec(openSec === 'a' + it.n ? null : 'a' + it.n)}
                           points={it.points}
