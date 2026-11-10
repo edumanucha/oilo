@@ -34,11 +34,12 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,mjs}'],
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
-        globIgnores: ['ort/**', 'piper/**'],
+        globIgnores: ['piper/**'],
         runtimeCaching: [
           {
             // Motor de la voz natural: se guarda la primera vez que se usa.
-            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\/(ort|piper)\//.test(url.pathname),
+            // Motores de voz (piper y los .wasm de onnxruntime): se guardan la primera vez que se usan.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && (/\/piper\//.test(url.pathname) || /\.wasm$/.test(url.pathname)),
             handler: 'CacheFirst',
             options: { cacheName: 'oilo-voice-engine', expiration: { maxEntries: 10 } },
           },

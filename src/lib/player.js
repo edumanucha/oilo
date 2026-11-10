@@ -5,7 +5,6 @@ import { saveProgress, updateBook, getAudio, putAudio, audioKeys, deleteAudio } 
 import { systemVoices } from './voices.js';
 import { announce, chapterLabel } from './i18n.js';
 import { summarizeChapter } from './ai.js';
-import { localAi } from './localAi.js';
 
 // Cuántas frases se generan por adelantado con la voz natural.
 // Más margen = sigue sonando aunque el celular bloqueado frene un poco la app.
@@ -518,7 +517,7 @@ export class Player {
           // Con clave: Gemini. Sin clave: la IA chiquita del celular (3 frases: principio, medio y final).
           const summary = this.aiKey
             ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: isCur })
-            : await localAi.summarize(this.paras.slice(ch.start, upto), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 3 });
+            : null; // IA local desactivada por ahora
           book.aiSummaries = { ...(book.aiSummaries || {}), [i]: { text: summary, upto, full: !isCur } };
           updateBook(book.id, { aiSummaries: book.aiSummaries });
         } catch (e) {
@@ -554,7 +553,7 @@ export class Player {
           const chapterName = book.lang === 'en' ? 'a passage' : 'un fragmento';
           sec.ai = this.aiKey
             ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: false })
-            : await localAi.summarize(this.paras.slice(sec.start, sec.end), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 1 });
+            : null;
           book.aiSections = { ...(book.aiSections || {}), [k]: sec.ai };
           updateBook(book.id, { aiSections: book.aiSections });
         } catch (e) {

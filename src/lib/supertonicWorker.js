@@ -84,7 +84,6 @@ async function load(base, report, variant = 'full') {
   ttsVariant = variant;
   if (!loading) {
     loading = (async () => {
-      ort.env.wasm.wasmPaths = new URL('ort/', base).href;
       ort.env.wasm.numThreads = 1;
       const files = await download(variant, report);
       // Placa de video (WebGPU) si el equipo la tiene: mucho más rápida. Si no, procesador (wasm).

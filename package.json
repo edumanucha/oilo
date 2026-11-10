@@ -12,7 +12,6 @@
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/karla": "^5.3.0",
-    "@huggingface/transformers": "^4.3.2",
     "@mintplex-labs/piper-tts-web": "^1.0.5",
     "idb": "^8.0.4",
     "jszip": "^3.10.2",

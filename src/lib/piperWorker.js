@@ -5,7 +5,7 @@ import { TtsSession } from '@mintplex-labs/piper-tts-web';
 let WASM = null;
 function wasmPaths(base) {
   return {
-    onnxWasm: new URL('ort/', base).href,
+    onnxWasm: undefined, // usa el motor que empaqueta la app (sin duplicados)
     piperData: new URL('piper/piper_phonemize.data', base).href,
     piperWasm: new URL('piper/piper_phonemize.wasm', base).href,
   };
