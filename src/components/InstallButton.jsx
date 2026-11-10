@@ -32,7 +32,17 @@ export default function InstallButton({ t }) {
 
   if (isStandalone()) return null;
   const ios = isIOS();
-  if (!deferred && !ios) return null;
+  const ua = navigator.userAgent;
+  // Navegadores que abren las apps de mensajería (WhatsApp, Instagram, Facebook) no permiten instalar.
+  const inApp = /FBAN|FBAV|Instagram|WhatsApp|Line\/|wv\)/i.test(ua);
+  const samsung = /SamsungBrowser/i.test(ua);
+  const steps = ios
+    ? [t('iosStep1'), t('iosStep2'), t('iosStep3')]
+    : inApp
+      ? [t('inAppStep1'), t('inAppStep2')]
+      : samsung
+        ? [t('samsungStep1'), t('samsungStep2')]
+        : [t('androidStep1'), t('androidStep2')];
 
   const install = async () => {
     if (deferred) {
@@ -51,11 +61,9 @@ export default function InstallButton({ t }) {
       {help && (
         <div className="sheet-bg" onClick={() => setHelp(false)}>
           <div className="sheet" onClick={(e) => e.stopPropagation()}>
-            <h3>{t('installTitle')}</h3>
+            <h3>{ios ? t('installTitle') : t('installTitleGeneric')}</h3>
             <ol className="recap">
-              <li>{t('iosStep1')}</li>
-              <li>{t('iosStep2')}</li>
-              <li>{t('iosStep3')}</li>
+              {steps.map((s, i) => <li key={i}>{s}</li>)}
             </ol>
             <span className="postit">{t('installNote')}</span>
             <button className="btn primary block" onClick={() => setHelp(false)}>{t('gotIt')}</button>
