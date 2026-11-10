@@ -1,0 +1,8 @@
+node_modules
+dist
+dev-dist
+test-books
+estilos.html
+estilo-mate.html
+.claude
+*.log
