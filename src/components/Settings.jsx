@@ -3,6 +3,7 @@ import Icon from './Icon.jsx';
 import { PIPER_VOICES, SUPERTONIC_VOICES, SUPERTONIC_MB, systemVoices, waitForSystemVoices } from '../lib/voices.js';
 import { player } from '../lib/player.js';
 import { makeT } from '../lib/i18n.js';
+import { APP_VERSION, checkForUpdate } from '../lib/updater.js';
 
 const piperLib = () => import('@mintplex-labs/piper-tts-web');
 
@@ -236,6 +237,24 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
         <button className={uiLang === 'en' ? 'on' : ''} onClick={() => setUiLang('en')}>English</button>
       </div>
       <p className="muted" style={{ textAlign: 'center', marginTop: 20 }}>{t('about')}</p>
+      <UpdateRow t={t} />
+    </div>
+  );
+}
+
+function UpdateRow({ t }) {
+  const [state, setState] = useState('idle'); // idle | checking | latest
+  const check = async () => {
+    setState('checking');
+    const updating = await checkForUpdate();
+    if (!updating) setState('latest');
+  };
+  return (
+    <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'center' }}>
+      <span className="muted tiny">{t('version')}: {APP_VERSION}</span>
+      <button className="btn" onClick={check} disabled={state === 'checking'}>
+        {state === 'checking' ? <span className="spin" /> : <Icon name="download" />} {state === 'latest' ? t('upToDate') : t('checkUpdate')}
+      </button>
     </div>
   );
 }
