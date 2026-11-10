@@ -103,6 +103,23 @@ export function summarize(paragraphs, lang = 'es', maxSentences = 6) {
   return summarizeWithPos(paragraphs, lang, maxSentences).map((x) => x.s);
 }
 
+// Nombres propios que más se repiten (personajes, lugares): sirven como "título" corto de una parte.
+export function keyNames(paragraphs, lang = 'es', n = 3) {
+  const stop = STOP[lang] || STOP.es;
+  const freq = new Map();
+  for (const p of paragraphs) {
+    for (const s of splitSentences(p, lang)) {
+      const words = s.match(/[\p{L}][\p{L}'’-]*/gu) || [];
+      words.forEach((w, i) => {
+        if (i === 0 || w.length < 3) return; // la primera palabra de la frase siempre va en mayúscula
+        if (!/^\p{Lu}\p{Ll}/u.test(w) || stop.has(w.toLowerCase())) return;
+        freq.set(w, (freq.get(w) || 0) + 1);
+      });
+    }
+  }
+  return [...freq].sort((a, b) => b[1] - a[1]).slice(0, n).map(([w]) => w);
+}
+
 // Igual que summarize, pero cada frase recuerda de dónde salió ({ s, p: párrafo, si: frase })
 // para poder saltar a esa parte del libro.
 export function summarizeWithPos(paragraphs, lang = 'es', maxSentences = 6, base = 0) {

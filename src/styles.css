@@ -315,3 +315,26 @@ svg.i.solid { fill: currentColor; stroke: none; }
   --postit: #5b4b1c; --postit-ink: #f6e08a; --danger: #f08a6e; color-scheme: dark;
 }
 :root[data-theme="light"] { color-scheme: light; }
+
+/* hojas: que nada se aplaste y los botones queden siempre a la vista */
+.sheet > * { flex-shrink: 0; }
+.sheet .tabs { padding-top: 2px; min-height: 36px; }
+.sheet-actions { position: sticky; bottom: calc(-22px - env(safe-area-inset-bottom)); margin: 4px -18px calc(-22px - env(safe-area-inset-bottom)); padding: 12px 18px calc(16px + env(safe-area-inset-bottom)); background: var(--paper) var(--grain); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.sheet ol.recap li .txt, .chsum .jumpable > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.sheet ol.recap li .go, .chsum .go { align-self: flex-start; font-size: 16px; }
+
+/* resumen en dos niveles */
+.secs { display: flex; flex-direction: column; }
+.sec { border-bottom: 1px solid var(--line); }
+.sec-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 12px 2px; text-align: left; }
+.sec-head > b, .sec.here > b { font-family: var(--hand); font-weight: 700; font-size: 24px; color: var(--terra); min-width: 22px; line-height: 1; }
+.sec-title { flex: 1; min-width: 0; font-family: var(--serif); font-size: 17px; line-height: 1.25; }
+.sec-title small { display: block; font-family: var(--sans); font-size: 11px; text-transform: uppercase; letter-spacing: .6px; color: var(--ink-3); }
+.sec-head svg.i { width: 20px; height: 20px; color: var(--ink-3); transition: transform .2s; }
+.sec.open .sec-head svg.i { transform: rotate(180deg); }
+.sec-body { list-style: none; margin: 0 0 10px 34px; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.sec-body li { display: flex; flex-direction: column; gap: 2px; font-family: var(--serif); font-size: 15px; line-height: 1.4; cursor: pointer; padding: 6px 8px; border-left: 2px solid var(--hl); border-radius: 0 6px 6px 0; }
+.sec-body li:active { background: var(--hl-soft); }
+.sec.here { display: flex; align-items: center; gap: 12px; padding: 12px 2px; }
+.sec.here span { font-family: var(--serif); font-style: italic; color: var(--ink-2); }

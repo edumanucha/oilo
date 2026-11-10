@@ -26,6 +26,7 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
     if (!state.playing) player.play();
   };
   const [recapTab, setRecapTab] = useState('last');
+  const [openSec, setOpenSec] = useState(null);
   const [listTab, setListTab] = useState('chapters');
   const [marked, setMarked] = useState(false);
   const mark = () => { player.addBookmark(); setMarked(true); setTimeout(() => setMarked(false), 1800); };
@@ -278,41 +279,82 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                   <button className={recapTab === 'all' ? 'on' : ''} onClick={() => setRecapTab('all')}>{t('recapAll')}</button>
                 </div>
                 {recapTab === 'last' ? (
-                  recap.sentences.length ? (
+                  recap.sections.length ? (
                     <>
-                      <span className="muted">{t('recapLastLead')}</span>
-                      <ol className="recap jumpable">
-                        {recap.points.map((pt, i) => (
-                          <li key={i} onClick={() => jumpTo(pt)} role="button">{pt.s} <span className="go">{t('goThere')}</span></li>
+                      <span className="muted">{t('recapSectionsLead')}</span>
+                      <div className="secs">
+                        {recap.sections.map((sec, i) => (
+                          <Section
+                            key={i}
+                            n={i + 1}
+                            title={sec.names.length ? sec.names.join(' · ') : t('partN', { n: i + 1 })}
+                            open={openSec === 'l' + i}
+                            onToggle={() => setOpenSec(openSec === 'l' + i ? null : 'l' + i)}
+                            points={sec.points}
+                            onJump={jumpTo}
+                            t={t}
+                          />
                         ))}
-                      </ol>
+                      </div>
                     </>
                   ) : <p className="muted">{t('recapEmpty')}</p>
                 ) : recapAll.items.length ? (
                   <>
                     <span className="muted">{t('recapAllLead', { title: book.title, n: Math.max(0, recapAll.chapterNumber - 1), total: book.chapters.length })}</span>
-                    <div className="chsum">
+                    <div className="secs">
                       {recapAll.items.map((it) => (
-                        <div key={it.n} className="jumpable" role="button" onClick={() => jumpTo(it.points[0])}>
-                          <b>{it.n}</b>
-                          <span>
-                            {it.title && !it.pages && <small>{it.title}</small>}
-                            {it.lines.join(' ')} <span className="go">{t('goThere')}</span>
-                          </span>
-                        </div>
+                        <Section
+                          key={it.n}
+                          n={it.n}
+                          kicker={it.title && !it.pages ? it.title : null}
+                          title={it.names?.length ? it.names.join(' · ') : chapterLabel(book.lang, it.n, it.title, it.pages)}
+                          open={openSec === 'a' + it.n}
+                          onToggle={() => setOpenSec(openSec === 'a' + it.n ? null : 'a' + it.n)}
+                          points={it.points}
+                          onJump={jumpTo}
+                          t={t}
+                        />
                       ))}
-                      <div className="here"><b>{recapAll.chapterNumber}</b><span>{t('recapHere')}</span></div>
+                      <div className="sec here"><b>{recapAll.chapterNumber}</b><span>{t('recapHere')}</span></div>
                     </div>
                   </>
                 ) : <p className="muted">{t('recapEmpty')}</p>}
-                {((recapTab === 'last' && recap.sentences.length > 0) || (recapTab === 'all' && recapAll.items.length > 0)) && (
-                  <button className="btn primary block" onClick={() => { player.playRecap(recapLines()); setSheet(null); }}><Icon name="volume" /> {t('recapTellMe')}</button>
-                )}
-                <button className="btn block" onClick={() => { setSheet(null); if (!state.playing) player.play(); }}>{t('recapKeep')}</button>
+                <div className="sheet-actions">
+                  {((recapTab === 'last' && recap.sentences.length > 0) || (recapTab === 'all' && recapAll.items.length > 0)) && (
+                    <button className="btn primary block" onClick={() => { player.playRecap(recapLines()); setSheet(null); }}><Icon name="volume" /> {t('recapTellMe')}</button>
+                  )}
+                  <button className="btn block" onClick={() => { setSheet(null); if (!state.playing) player.play(); }}>{t('recapKeep')}</button>
+                </div>
               </>
             )}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// Una sección del resumen: renglón corto (número + nombres clave); al tocarla se abren sus frases.
+function Section({ n, title, kicker, open, onToggle, points, onJump, t }) {
+  return (
+    <div className={`sec ${open ? 'open' : ''}`}>
+      <button className="sec-head" onClick={onToggle} aria-expanded={open}>
+        <b>{n}</b>
+        <span className="sec-title">
+          {kicker && <small>{kicker}</small>}
+          {title}
+        </span>
+        <Icon name="down" />
+      </button>
+      {open && (
+        <ul className="sec-body">
+          {points.map((pt, i) => (
+            <li key={i} onClick={() => onJump(pt)} role="button">
+              <span className="clamp">{pt.s}</span>
+              <span className="go">{t('goThere')}</span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

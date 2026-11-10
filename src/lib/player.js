@@ -1,6 +1,6 @@
 // Motor de reproducción: recorre el libro frase por frase, anuncia capítulos,
 // genera la voz por adelantado (para libros enormes) y recuerda la posición.
-import { splitSentences, summarize, summarizeWithPos } from './text.js';
+import { splitSentences, summarize, summarizeWithPos, keyNames } from './text.js';
 import { saveProgress, updateBook, getAudio, putAudio, audioKeys, deleteAudio } from './db.js';
 import { systemVoices } from './voices.js';
 import { announce } from './i18n.js';
@@ -451,8 +451,26 @@ export class Player {
       chars += this.paras[from].length;
     }
     const recent = this.paras.slice(from, c.p + 1);
-    const points = c.p === 0 && c.s === 0 ? [] : summarizeWithPos(recent, lang, 6, from);
-    return { chapterNumber: idx + 1, chapterTitle: ch.title, pages: ch.pages, sentences: points.map((x) => x.s), points };
+    if (c.p === 0 && c.s === 0) return { chapterNumber: idx + 1, chapterTitle: ch.title, pages: ch.pages, sentences: [], points: [], sections: [] };
+    // Partimos lo último leído en hasta 4 secciones de largo parecido; cada una con sus nombres clave y 2 frases.
+    const total = recent.reduce((n, p) => n + p.length, 0);
+    const parts = Math.max(1, Math.min(4, Math.round(total / 2500)));
+    const sections = [];
+    let start = 0;
+    for (let k = 0; k < parts; k++) {
+      let acc = 0;
+      let end = start;
+      const goal = total / parts;
+      while (end < recent.length && (acc < goal || k === parts - 1)) acc += recent[end++].length;
+      const slice = recent.slice(start, end);
+      if (slice.length) {
+        const pts = summarizeWithPos(slice, lang, 2, from + start);
+        if (pts.length) sections.push({ names: keyNames(slice, lang, 3), points: pts, start: from + start });
+      }
+      start = end;
+    }
+    const points = sections.flatMap((x) => x.points);
+    return { chapterNumber: idx + 1, chapterTitle: ch.title, pages: ch.pages, sentences: points.map((x) => x.s), points, sections };
   }
   // Resumen de todo el libro hasta donde vas: un renglón (o dos) por capítulo escuchado.
   buildRecapAll() {
@@ -467,7 +485,7 @@ export class Player {
       const slice = this.paras.slice(ch.start, end);
       const chars = slice.reduce((n, p) => n + p.length, 0);
       const points = summarizeWithPos(slice, lang, chars > 6000 ? 2 : 1, ch.start);
-      if (points.length) items.push({ n: i + 1, title: ch.title, pages: ch.pages, lines: points.map((x) => x.s), points, partial: i === idx });
+      if (points.length) items.push({ n: i + 1, title: ch.title, pages: ch.pages, names: keyNames(slice, lang, 3), lines: points.map((x) => x.s), points, partial: i === idx });
     }
     return { chapterNumber: idx + 1, items };
   }
