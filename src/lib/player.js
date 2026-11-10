@@ -1,6 +1,6 @@
 // Motor de reproducción: recorre el libro frase por frase, anuncia capítulos,
 // genera la voz por adelantado (para libros enormes) y recuerda la posición.
-import { splitSentences, summarize } from './text.js';
+import { splitSentences, summarize, summarizeWithPos } from './text.js';
 import { saveProgress, updateBook, getAudio, putAudio, audioKeys, deleteAudio } from './db.js';
 import { systemVoices } from './voices.js';
 import { announce } from './i18n.js';
@@ -146,7 +146,9 @@ export class Player {
   _watchdog() {
     if (!this.playing || this.loading) return;
     const audioIdle = this.audio.paused || this.audio.ended;
-    const sysIdle = typeof speechSynthesis === 'undefined' || (!speechSynthesis.speaking && !speechSynthesis.pending);
+    // La voz del celular a veces no informa que está hablando: le damos el tiempo estimado de la frase.
+    const sysBusy = this._sysStart && Date.now() - this._sysStart < ((this._sysLen || 0) / (15 * this.rate)) * 1000 + 4000;
+    const sysIdle = typeof speechSynthesis === 'undefined' || (!speechSynthesis.speaking && !speechSynthesis.pending && !sysBusy);
     const idleFor = Date.now() - (this._lastActivity || 0);
     if (audioIdle && sysIdle && idleFor > 4000) this._speakCurrent();
   }
@@ -387,7 +389,13 @@ export class Player {
   /* ---------- palabra que se está leyendo (0..1 dentro de la frase) ---------- */
   wordFraction() {
     if (!this.playing || this.extraQueue || this.loading || !this.cursor || this.cursor.a) return null;
-    if (this.engine === 'system' || this.usingFallback) return this._sysLen ? this._sysChar / this._sysLen : null;
+    if (this.engine === 'system' || this.usingFallback) {
+      if (!this._sysLen) return null;
+      // Si el celular avisa la palabra exacta, la usamos; si no, estimamos por tiempo (~15 letras por segundo).
+      if (this._sysBoundary) return this._sysChar / this._sysLen;
+      const elapsed = (Date.now() - (this._sysStart || Date.now())) / 1000;
+      return Math.min(1, (elapsed * 15 * this.rate) / this._sysLen);
+    }
     const d = this.audio.duration;
     if (!d || !isFinite(d)) return null;
     // La voz deja un pequeño silencio al final: lo descontamos para no adelantarnos.
@@ -443,8 +451,8 @@ export class Player {
       chars += this.paras[from].length;
     }
     const recent = this.paras.slice(from, c.p + 1);
-    const sentences = c.p === 0 && c.s === 0 ? [] : summarize(recent, lang, 6);
-    return { chapterNumber: idx + 1, chapterTitle: ch.title, pages: ch.pages, sentences };
+    const points = c.p === 0 && c.s === 0 ? [] : summarizeWithPos(recent, lang, 6, from);
+    return { chapterNumber: idx + 1, chapterTitle: ch.title, pages: ch.pages, sentences: points.map((x) => x.s), points };
   }
   // Resumen de todo el libro hasta donde vas: un renglón (o dos) por capítulo escuchado.
   buildRecapAll() {
@@ -458,8 +466,8 @@ export class Player {
       if (end <= ch.start) continue;
       const slice = this.paras.slice(ch.start, end);
       const chars = slice.reduce((n, p) => n + p.length, 0);
-      const lines = summarize(slice, lang, chars > 6000 ? 2 : 1);
-      if (lines.length) items.push({ n: i + 1, title: ch.title, pages: ch.pages, lines, partial: i === idx });
+      const points = summarizeWithPos(slice, lang, chars > 6000 ? 2 : 1, ch.start);
+      if (points.length) items.push({ n: i + 1, title: ch.title, pages: ch.pages, lines: points.map((x) => x.s), points, partial: i === idx });
     }
     return { chapterNumber: idx + 1, items };
   }
@@ -710,7 +718,10 @@ export class Player {
     u.rate = Math.min(3, Math.max(0.5, this.rate));
     this._sysChar = 0;
     this._sysLen = text.length;
-    u.onboundary = (e) => { if (e.name === 'word' || e.charIndex) this._sysChar = e.charIndex; };
+    this._sysBoundary = false;
+    this._sysStart = Date.now();
+    u.onstart = () => (this._sysStart = Date.now());
+    u.onboundary = (e) => { if (e.name === 'word' || e.charIndex) { this._sysChar = e.charIndex; this._sysBoundary = true; } };
     u.onend = () => token === this.token && this._onItemEnd(token);
     u.onerror = (e) => {
       if (token === this.token && e.error !== 'interrupted' && e.error !== 'canceled') this._onItemEnd(token);

@@ -17,6 +17,14 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
   const [coverOpen, setCoverOpen] = useState(false);
   const [sheet, setSheet] = useState(null); // 'chapters' | 'speed' | 'voice' | 'sleep' | 'recap'
   const [showText, setShowText] = useState(false);
+  const [follow, setFollow] = useState(true);
+  // Saltar a una frase del resumen ("me quedé dormido en la parte 5").
+  const jumpTo = (pt) => {
+    player.seek({ p: pt.p, s: pt.si, a: null });
+    setSheet(null);
+    setFollow(true);
+    if (!state.playing) player.play();
+  };
   const [recapTab, setRecapTab] = useState('last');
   const [listTab, setListTab] = useState('chapters');
   const [marked, setMarked] = useState(false);
@@ -90,7 +98,7 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
       )}
 
       {showText ? (
-        <Reader book={book} paras={paras} cursor={c} t={t} playing={state.playing && !state.loading} />
+        <Reader book={book} paras={paras} cursor={c} t={t} playing={state.playing && !state.loading} follow={follow} setFollow={setFollow} />
       ) : (
         <>
           <button className="big" onClick={() => setCoverOpen(true)} aria-label={t('changeCover')}>
@@ -147,16 +155,41 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
         <button className={state.sleepAt || state.sleepEndOfChapter ? 'on' : ''} onClick={() => setSheet('sleep')}>
           {state.sleepAt ? <b>{Math.max(1, Math.round((state.sleepAt - Date.now()) / 60000))}′</b> : <Icon name="moon" />}{t('dormir')}
         </button>
-        <button className={showText ? 'on' : ''} onClick={() => setShowText(!showText)}><Icon name="book" />{t('textLbl')}</button>
+        <button className={showText ? 'on' : ''} onClick={() => { setShowText(!showText); setFollow(true); }}><Icon name="book" />{t('textLbl')}</button>
         <button className={marked ? 'on' : ''} onClick={mark}><Icon name="bookmark" />{marked ? t('marked') : t('markLbl')}</button>
       </div>
 
+      {showText && !follow && (
+        <button className="back-to-reading" onClick={() => setFollow(true)}>
+          <Icon name="down" /> {t('backToReading')}
+        </button>
+      )}
+
       {showText && (
-        <div className="dock">
-          <button className="icon-btn" onClick={() => player.prevSentence()} aria-label="prev"><Icon name="prev" /></button>
-          {playBtn}
-          <button className="icon-btn" onClick={() => player.nextSentence()} aria-label="next"><Icon name="next" /></button>
-          <button className="icon-btn" onClick={() => openRecap('last')} aria-label={t('recap')}><Icon name="history" /></button>
+        <div className="dock with-progress">
+          <div className="dock-progress">
+            <input
+              className="scrub"
+              type="range"
+              min="0"
+              max="1000"
+              value={Math.round((dragFrac ?? frac) * 1000)}
+              onChange={(e) => setDragFrac(Number(e.target.value) / 1000)}
+              onPointerUp={() => { if (dragFrac !== null) { player.goToFraction(dragFrac); setDragFrac(null); setFollow(true); } }}
+              aria-label="progress"
+            />
+            <div className="marks">
+              <span>{t('chapterLeft', { t: formatDuration(player.chapterRemainingMs(), t) })}</span>
+              <span>{t('bookPct', { n: Math.round((dragFrac ?? frac) * 100) })}</span>
+            </div>
+          </div>
+          <div className="dock-buttons">
+            <button className="icon-btn" onClick={() => player.prevChapter()} aria-label="prev chapter"><Icon name="skipBack" /></button>
+            <button className="icon-btn" onClick={() => player.prevSentence()} aria-label="prev"><Icon name="prev" /></button>
+            {playBtn}
+            <button className="icon-btn" onClick={() => player.nextSentence()} aria-label="next"><Icon name="next" /></button>
+            <button className="icon-btn" onClick={() => openRecap('last')} aria-label={t('recap')}><Icon name="history" /></button>
+          </div>
         </div>
       )}
 
@@ -248,7 +281,11 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                   recap.sentences.length ? (
                     <>
                       <span className="muted">{t('recapLastLead')}</span>
-                      <ol className="recap">{recap.sentences.map((s, i) => <li key={i}>{s}</li>)}</ol>
+                      <ol className="recap jumpable">
+                        {recap.points.map((pt, i) => (
+                          <li key={i} onClick={() => jumpTo(pt)} role="button">{pt.s} <span className="go">{t('goThere')}</span></li>
+                        ))}
+                      </ol>
                     </>
                   ) : <p className="muted">{t('recapEmpty')}</p>
                 ) : recapAll.items.length ? (
@@ -256,11 +293,11 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                     <span className="muted">{t('recapAllLead', { title: book.title, n: Math.max(0, recapAll.chapterNumber - 1), total: book.chapters.length })}</span>
                     <div className="chsum">
                       {recapAll.items.map((it) => (
-                        <div key={it.n}>
+                        <div key={it.n} className="jumpable" role="button" onClick={() => jumpTo(it.points[0])}>
                           <b>{it.n}</b>
                           <span>
                             {it.title && !it.pages && <small>{it.title}</small>}
-                            {it.lines.join(' ')}
+                            {it.lines.join(' ')} <span className="go">{t('goThere')}</span>
                           </span>
                         </div>
                       ))}
@@ -297,7 +334,7 @@ function Karaoke({ text, active }) {
   }, [active, text]);
   const words = useMemo(() => {
     const out = [];
-    const re = /S+s*/g;
+    const re = /\S+\s*/g;
     let m;
     while ((m = re.exec(text))) out.push({ w: m[0], at: m.index });
     return out;
@@ -315,15 +352,54 @@ function Karaoke({ text, active }) {
   );
 }
 
-// Hoja rayada con la frase actual resaltada. Solo dibuja una "ventana" alrededor: aguanta libros enormes.
-function Reader({ book, paras, cursor, t, playing }) {
+// Hoja rayada con la frase actual resaltada. Solo dibuja una "ventana" de párrafos: aguanta libros enormes.
+// Si hacés scroll con el dedo, deja de seguir la lectura y aparece un botón para volver.
+function Reader({ book, paras, cursor, t, playing, follow, setFollow }) {
   const curRef = useRef();
-  const from = Math.max(0, cursor.p - 10);
-  const to = Math.min(paras.length, cursor.p + 30);
+  const topRef = useRef();
+  const bottomRef = useRef();
+  const [range, setRange] = useState(() => [Math.max(0, cursor.p - 15), Math.min(paras.length, cursor.p + 40)]);
+  const [from, to] = range;
   const starts = useMemo(() => new Map(book.chapters.map((c, i) => [c.start, i])), [book]);
+
+  // Siguiendo la lectura: la ventana acompaña a la frase actual y la centra en pantalla.
   useEffect(() => {
-    curRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' });
-  }, [cursor.p, cursor.s]);
+    if (!follow) return;
+    if (cursor.p < from + 3 || cursor.p > to - 10) setRange([Math.max(0, cursor.p - 15), Math.min(paras.length, cursor.p + 40)]);
+    const id = requestAnimationFrame(() => curRef.current?.scrollIntoView({ block: 'center', behavior: 'smooth' }));
+    return () => cancelAnimationFrame(id);
+  }, [cursor.p, cursor.s, follow]);
+
+  // Scroll con el dedo o la rueda: el usuario quiere mirar otra parte.
+  useEffect(() => {
+    const stop = () => setFollow(false);
+    window.addEventListener('touchmove', stop, { passive: true });
+    window.addEventListener('wheel', stop, { passive: true });
+    return () => {
+      window.removeEventListener('touchmove', stop);
+      window.removeEventListener('wheel', stop);
+    };
+  }, []);
+
+  // Al llegar arriba o abajo de lo dibujado, sumamos más párrafos.
+  useEffect(() => {
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!e.isIntersecting) continue;
+        if (e.target === topRef.current) setRange(([a, b]) => [Math.max(0, a - 30), b]);
+        if (e.target === bottomRef.current) setRange(([a, b]) => [a, Math.min(paras.length, b + 30)]);
+      }
+    }, { rootMargin: '600px 0px' });
+    if (topRef.current) io.observe(topRef.current);
+    if (bottomRef.current) io.observe(bottomRef.current);
+    return () => io.disconnect();
+  }, [from, to]);
+
+  const jump = (p) => {
+    player.goToParagraph(p);
+    setFollow(true);
+    if (!player.playing) player.play();
+  };
 
   const items = [];
   for (let p = from; p < to; p++) {
@@ -335,18 +411,26 @@ function Reader({ book, paras, cursor, t, playing }) {
     if (isCur && !cursor.a) {
       const sents = player.sentencesOf(p);
       items.push(
-        <p key={p} ref={curRef} className="cur" onClick={() => player.goToParagraph(p)}>
-          {sents.map((s, i) => (i === cursor.s ? <mark key={i}><Karaoke text={s} active={playing} />{' '}</mark> : <span key={i}>{s} </span>))}
+        <p key={p} className="cur" onClick={() => jump(p)}>
+          {sents.map((s, i) =>
+            i === cursor.s ? (
+              <mark key={i} ref={curRef} className="reading"><Karaoke text={s} active={playing} />{' '}</mark>
+            ) : (
+              <span key={i} className={i < cursor.s ? 'done' : ''}>{s} </span>
+            )
+          )}
         </p>
       );
     } else {
-      items.push(<p key={p} ref={isCur ? curRef : null} className={isCur ? 'cur' : ''} onClick={() => player.goToParagraph(p)}>{paras[p]}</p>);
+      items.push(<p key={p} ref={isCur ? curRef : null} className={isCur ? 'cur' : p < cursor.p ? 'done' : ''} onClick={() => jump(p)}>{paras[p]}</p>);
     }
   }
   return (
     <div className="page">
       <p className="note" style={{ fontSize: 19, margin: '0 0 32px', lineHeight: '32px', color: 'var(--terra)', cursor: 'default' }}>{t('tapToJump')}</p>
+      <div ref={topRef} style={{ height: 1 }} />
       {items}
+      <div ref={bottomRef} style={{ height: 1 }} />
     </div>
   );
 }

@@ -10,7 +10,7 @@ function greeting(t) {
   return h >= 5 && h < 13 ? t('morning') : h >= 13 && h < 20 ? t('afternoon') : t('evening');
 }
 
-export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, onSettings, onSample, onDiscover, current, playerState, onToggle }) {
+export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, onSettings, onSample, onDiscover, onToggleTheme, theme, current, playerState, onToggle }) {
   const [filter, setFilter] = useState('all');
   const status = (b) => (b.progress?.finished ? 'finished' : b.progress?.fraction > 0 ? 'reading' : 'unread');
   const shown = books.filter((b) => filter === 'all' || status(b) === filter);
@@ -39,6 +39,7 @@ export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, on
             <button className={uiLang === 'es' ? 'on' : ''} onClick={() => setUiLang('es')}>ES</button>·
             <button className={uiLang === 'en' ? 'on' : ''} onClick={() => setUiLang('en')}>EN</button>
           </div>
+          <button className="icon-btn" onClick={onToggleTheme} aria-label={t('theme')}><Icon name={theme === 'dark' || (theme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) ? 'sun' : 'moon'} /></button>
           <button className="icon-btn" onClick={onSettings} aria-label={t('settings')}><Icon name="settings" /></button>
         </div>
       </div>

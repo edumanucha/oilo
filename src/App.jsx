@@ -11,7 +11,7 @@ import { makeT, defaultUiLang } from './lib/i18n.js';
 import { DEFAULT_VOICE, DEFAULT_ST_VOICE } from './lib/voices.js';
 import { ensureSamples, addSample } from './lib/samples.js';
 
-const DEFAULT_SETTINGS = { engine: 'supertonic', rate: 1, stVoice: { ...DEFAULT_ST_VOICE }, piperVoice: { ...DEFAULT_VOICE }, systemVoice: {} };
+const DEFAULT_SETTINGS = { theme: 'auto', engine: 'supertonic', rate: 1, stVoice: { ...DEFAULT_ST_VOICE }, piperVoice: { ...DEFAULT_VOICE }, systemVoice: {} };
 
 export default function App() {
   const [view, setView] = useState({ name: 'library' });
@@ -55,6 +55,17 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.lang = uiLang;
+  }, [uiLang]);
+
+  // Modo claro / oscuro / automático (sigue al celular).
+  useEffect(() => {
+    const th = settings.theme || 'auto';
+    if (th === 'auto') delete document.documentElement.dataset.theme;
+    else document.documentElement.dataset.theme = th;
+    const dark = th === 'dark' || (th === 'auto' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+    document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#1c1812' : '#5d7a2e');
+  }, [settings.theme]);
+  useEffect(() => {
   }, [uiLang]);
 
   const setUiLang = (l) => {
@@ -109,6 +120,11 @@ export default function App() {
           onAdd={() => setView({ name: 'add' })}
           onSettings={() => setView({ name: 'settings' })}
           onDiscover={() => setView({ name: 'discover' })}
+          theme={settings.theme}
+          onToggleTheme={() => {
+            const dark = settings.theme === 'dark' || (settings.theme !== 'light' && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
+            setSettings({ theme: dark ? 'light' : 'dark' });
+          }}
           onSample={async () => { const id = await addSample(uiLang); await refresh(); openBook(id); }}
           current={currentBookForList}
           playerState={pState}

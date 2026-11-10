@@ -100,10 +100,17 @@ export function splitSentences(paragraph, lang = 'es') {
 
 // Resumen "extractivo": elige las frases más importantes del texto (sin IA, sin internet).
 export function summarize(paragraphs, lang = 'es', maxSentences = 6) {
-  const sentences = [];
-  paragraphs.forEach((p) => splitSentences(p, lang).forEach((s) => sentences.push(s)));
-  const candidates = sentences.filter((s) => s.length > 40 && s.length < 320);
-  if (candidates.length <= maxSentences) return candidates;
+  return summarizeWithPos(paragraphs, lang, maxSentences).map((x) => x.s);
+}
+
+// Igual que summarize, pero cada frase recuerda de dónde salió ({ s, p: párrafo, si: frase })
+// para poder saltar a esa parte del libro.
+export function summarizeWithPos(paragraphs, lang = 'es', maxSentences = 6, base = 0) {
+  const all = [];
+  paragraphs.forEach((p, pi) => splitSentences(p, lang).forEach((s, si) => all.push({ s, p: base + pi, si })));
+  const cand = all.filter((x) => x.s.length > 40 && x.s.length < 320);
+  if (cand.length <= maxSentences) return cand;
+  const candidates = cand.map((x) => x.s);
 
   const stop = STOP[lang] || STOP.es;
   const tokenize = (s) => (s.toLowerCase().match(/[\p{L}]{3,}/gu) || []).filter((w) => !stop.has(w));
@@ -140,7 +147,7 @@ export function summarize(paragraphs, lang = 'es', maxSentences = 6) {
     });
     if (!tooSimilar) chosen.push(c);
   }
-  return chosen.sort((a, b) => a.i - b.i).map((c) => c.s);
+  return chosen.sort((a, b) => a.i - b.i).map((c) => cand[c.i]);
 }
 
 export function formatDuration(ms, t) {

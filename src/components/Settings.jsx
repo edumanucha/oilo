@@ -224,6 +224,12 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
       <VoicePanel t={t} lang={lang} settings={settings} setSettings={setSettings} />
       <div className="h4">{t('speed')} · {String(settings.rate).replace('.', ',')}×</div>
       <input className="scrub" type="range" min="0.5" max="3" step="0.05" value={settings.rate} onChange={(e) => setSettings({ rate: Number(e.target.value) })} />
+      <div className="h4">{t('theme')}</div>
+      <div className="tog">
+        {['auto', 'light', 'dark'].map((th) => (
+          <button key={th} className={(settings.theme || 'auto') === th ? 'on' : ''} onClick={() => setSettings({ theme: th })}>{t(th === 'auto' ? 'themeAuto' : th === 'light' ? 'themeLight' : 'themeDark')}</button>
+        ))}
+      </div>
       <div className="h4">{t('appLanguage')}</div>
       <div className="tog">
         <button className={uiLang === 'es' ? 'on' : ''} onClick={() => setUiLang('es')}>Español</button>

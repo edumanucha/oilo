@@ -63,7 +63,7 @@ export async function recommend(title, author = '', { exclude = [] } = {}) {
       if (d.language && !d.language.some((l) => l === 'spa' || l === 'eng')) continue;
       const shared = [...new Set((d.subject || []).map((s) => s.toLowerCase()).filter((s) => seedSet.has(s)))];
       if (!shared.length) continue;
-      const tkey = norm(d.title.replace(/(.*?)/g, ''));
+      const tkey = norm(d.title.replace(/\(.*?\)/g, ''));
       if (excluded.has(tkey)) continue;
       d._tkey = tkey;
       d._pop = Math.log10(1 + (d.readinglog_count || 0) + 3 * (d.ratings_count || 0));
