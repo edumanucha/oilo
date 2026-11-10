@@ -166,7 +166,7 @@ export default function App() {
         <Discover t={t} books={books} initialId={current?.book.id} onBack={() => setView({ name: 'library' })} />
       )}
       {view.name === 'settings' && (
-        <Settings t={t} uiLang={uiLang} setUiLang={setUiLang} settings={settings} setSettings={setSettings} onBack={() => setView({ name: 'library' })} />
+        <Settings t={t} uiLang={uiLang} setUiLang={setUiLang} settings={settings} setSettings={setSettings} focus={view.focus} onBack={() => setView({ name: view.back || 'library' })} />
       )}
       {view.name === 'player' && current && (
         <PlayerView
@@ -182,6 +182,7 @@ export default function App() {
           }}
           onEdit={() => setView({ name: 'edit' })}
           onBookChanged={() => { setCurrent({ ...current }); refresh(); }}
+          onOpenSettings={() => setView({ name: 'settings', focus: 'ai', back: 'player' })}
         />
       )}
     </div>

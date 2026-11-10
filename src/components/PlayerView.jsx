@@ -13,7 +13,7 @@ const SPEEDS = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const DAY = 24 * 3600 * 1000;
 const fmtRate = (r) => `${String(Math.round(r * 100) / 100).replace('.', ',')}×`;
 
-export default function PlayerView({ t, book, paras, state, settings, setSettings, onBack, onEdit, onBookChanged }) {
+export default function PlayerView({ t, book, paras, state, settings, setSettings, onBack, onEdit, onBookChanged, onOpenSettings }) {
   const [coverOpen, setCoverOpen] = useState(false);
   const [sheet, setSheet] = useState(null); // 'chapters' | 'speed' | 'voice' | 'sleep' | 'recap'
   const [showText, setShowText] = useState(false);
@@ -30,9 +30,14 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
   const [, setAiTick] = useState(0);
   // Al abrir "Todo hasta acá", pedimos a Gemini los resúmenes que falten (si hay clave).
   useEffect(() => {
-    if (sheet !== 'recap' || recapTab !== 'all' || !settings.aiKey || !recapAll) return;
+    if (sheet !== 'recap' || recapTab !== 'all' || !(settings.aiKey || settings.aiLocal) || !recapAll) return;
     player.ensureAiSummaries(recapAll.chapterNumber - 1, () => setAiTick((n) => n + 1));
-  }, [sheet, recapTab, settings.aiKey]);
+  }, [sheet, recapTab, settings.aiKey, settings.aiLocal]);
+  // "Lo último": una línea de resumen por parte (si hay clave).
+  useEffect(() => {
+    if (sheet !== 'recap' || recapTab !== 'last' || !(settings.aiKey || settings.aiLocal) || !recap?.sections?.length) return;
+    player.ensureAiSectionTitles(recap.sections, () => setAiTick((n) => n + 1));
+  }, [sheet, recapTab, settings.aiKey, settings.aiLocal, recap]);
   const [listTab, setListTab] = useState('chapters');
   const [marked, setMarked] = useState(false);
   const mark = () => { player.addBookmark(); setMarked(true); setTimeout(() => setMarked(false), 1800); };
@@ -82,6 +87,27 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
     : state.finished ? t('finishedBook')
     : state.usingFallback ? t('fallbackNote', { name: voiceName || '' })
     : state.preparing ? t('preparingChapter', { n: state.preparing.chapter + 1, pct: Math.round((state.preparing.frac || 0) * 100) }) : '';
+
+  // Invitación a activar los resúmenes con IA (lleva directo a cargar la clave de Gemini).
+  const aiOffer = (
+    <div className="postit" style={{ fontSize: 17, display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <span>{t('aiOfferText')}</span>
+      <button className="btn primary" onClick={() => { setSheet(null); onOpenSettings?.(); }}><Icon name="sparkle" /> {t('aiSetup')}</button>
+    </div>
+  );
+
+  // Fila de opciones: suelta en el reproductor; dentro del bloque fijo de abajo en modo texto.
+  const optsRow = (
+    <div className={`opts ${showText ? 'in-dock' : ''}`}>
+      <button onClick={() => setSheet('speed')}><b>{fmtRate(settings.rate)}</b>{t('speedLbl')}</button>
+      <button onClick={() => setSheet('voice')}><b>{voiceName || '—'}</b>{t('voiceLbl')}</button>
+      <button className={state.sleepAt || state.sleepEndOfChapter ? 'on' : ''} onClick={() => setSheet('sleep')}>
+        {state.sleepAt ? <b>{Math.max(1, Math.round((state.sleepAt - Date.now()) / 60000))}′</b> : <Icon name="moon" />}{t('dormir')}
+      </button>
+      <button className={showText ? 'on' : ''} onClick={() => { setShowText(!showText); setFollow(true); }}><Icon name="book" />{t('textLbl')}</button>
+      <button className={marked ? 'on' : ''} onClick={mark}><Icon name="bookmark" />{marked ? t('marked') : t('markLbl')}</button>
+    </div>
+  );
 
   const playBtn = (
     <button className="play" onClick={() => player.toggle()} aria-label={state.playing ? 'pause' : 'play'}>
@@ -156,15 +182,7 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
         )
       )}
 
-      <div className={`opts ${showText ? 'sticky-bottom' : ''}`}>
-        <button onClick={() => setSheet('speed')}><b>{fmtRate(settings.rate)}</b>{t('speedLbl')}</button>
-        <button onClick={() => setSheet('voice')}><b>{voiceName || '—'}</b>{t('voiceLbl')}</button>
-        <button className={state.sleepAt || state.sleepEndOfChapter ? 'on' : ''} onClick={() => setSheet('sleep')}>
-          {state.sleepAt ? <b>{Math.max(1, Math.round((state.sleepAt - Date.now()) / 60000))}′</b> : <Icon name="moon" />}{t('dormir')}
-        </button>
-        <button className={showText ? 'on' : ''} onClick={() => { setShowText(!showText); setFollow(true); }}><Icon name="book" />{t('textLbl')}</button>
-        <button className={marked ? 'on' : ''} onClick={mark}><Icon name="bookmark" />{marked ? t('marked') : t('markLbl')}</button>
-      </div>
+      {!showText && optsRow}
 
       {showText && !follow && (
         <button className="back-to-reading" onClick={() => setFollow(true)}>
@@ -174,6 +192,7 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
 
       {showText && (
         <div className="dock with-progress">
+          {optsRow}
           <div className="dock-progress">
             <input
               className="scrub"
@@ -241,7 +260,10 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                   {book.chapters.map((chp, i) => (
                     <button key={i} className={i === chIdx ? 'on' : ''} onClick={() => { player.goToChapter(i); setSheet(null); }}>
                       {chapterLabel(book.lang, i + 1, chp.title, chp.pages)}
-                      <small>{(() => { const f = player.chapterPrepFraction(i); return f === null ? '' : f >= 1 ? t('prepReady') : state.preparing?.chapter === i ? t('prepPct', { n: Math.round(f * 100) }) : f > 0 ? t('prepPartial', { n: Math.round(f * 100) }) : ''; })()}</small>
+                      <small>
+                        {(() => { const f = player.chapterPrepFraction(i); return f === null ? '' : f >= 1 ? t('prepReady') + ' · ' : state.preparing?.chapter === i ? t('prepPct', { n: Math.round(f * 100) }) + ' · ' : f > 0 ? t('prepPartial', { n: Math.round(f * 100) }) + ' · ' : ''; })()}
+                        {Math.round(((player.offsets?.[chp.start] || 0) / (player.totalChars || 1)) * 100)}% · {formatDuration(((((chp.end < paras.length ? player.offsets[chp.end] : player.totalChars) - player.offsets[chp.start]) / 900) / settings.rate) * 60000, t)}
+                      </small>
                     </button>
                   ))}
                 </div>
@@ -288,12 +310,15 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                   recap.sections.length ? (
                     <>
                       <span className="muted">{t('recapSectionsLead')}</span>
+                      {!settings.aiKey && !settings.aiLocal && aiOffer}
+                      {(settings.aiKey || settings.aiLocal) && player.aiError && <p className="error">{t(settings.aiKey ? 'aiErr_' + player.aiError : 'localAiError')}</p>}
                       <div className="secs">
                         {recap.sections.map((sec, i) => (
                           <Section
                             key={i}
                             n={i + 1}
-                            title={sec.names.length ? sec.names.join(' · ') : t('partN', { n: i + 1 })}
+                            kicker={sec.aiBusy ? t('aiSummarizing') : sec.ai && sec.names.length ? sec.names.join(' · ') : null}
+                            title={sec.ai || (sec.names.length ? sec.names.join(' · ') : t('partN', { n: i + 1 }))}
                             open={openSec === 'l' + i}
                             onToggle={() => setOpenSec(openSec === 'l' + i ? null : 'l' + i)}
                             points={sec.points}
@@ -307,8 +332,8 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                 ) : recapAll.items.length ? (
                   <>
                     <span className="muted">{t('recapAllLead', { title: book.title, n: Math.max(0, recapAll.chapterNumber - 1), total: book.chapters.length })}</span>
-                    {!settings.aiKey && <span className="postit" style={{ fontSize: 17 }}>{t('aiNoKeyHint')}</span>}
-                    {settings.aiKey && player.aiError && <p className="error">{t('aiErr_' + player.aiError)}</p>}
+                    {!settings.aiKey && !settings.aiLocal && aiOffer}
+                    {(settings.aiKey || settings.aiLocal) && player.aiError && <p className="error">{t(settings.aiKey ? 'aiErr_' + player.aiError : 'localAiError')}</p>}
                     <div className="secs">
                       {recapAll.items.map((it) => (
                         <Section

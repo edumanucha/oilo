@@ -5,6 +5,7 @@ import { saveProgress, updateBook, getAudio, putAudio, audioKeys, deleteAudio } 
 import { systemVoices } from './voices.js';
 import { announce, chapterLabel } from './i18n.js';
 import { summarizeChapter } from './ai.js';
+import { localAi } from './localAi.js';
 
 // Cuántas frases se generan por adelantado con la voz natural.
 // Más margen = sigue sonando aunque el celular bloqueado frene un poco la app.
@@ -467,7 +468,7 @@ export class Player {
       const slice = recent.slice(start, end);
       if (slice.length) {
         const pts = summarizeWithPos(slice, lang, 2, from + start);
-        if (pts.length) sections.push({ names: keyNames(slice, lang, 3), points: pts, start: from + start });
+        if (pts.length) sections.push({ names: keyNames(slice, lang, 3), points: pts, start: from + start, end: from + end });
       }
       start = end;
     }
@@ -494,7 +495,7 @@ export class Player {
   /* ---------- resúmenes con IA (Gemini) por capítulo ---------- */
   // Resume los capítulos hasta 'upTo' que todavía no tengan resumen (el actual, solo hasta donde vas).
   async ensureAiSummaries(upTo, onUpdate) {
-    if (!this.aiKey || !this.book || this._aiRunning) return;
+    if (!(this.aiKey || this.aiLocal) || !this.book || this._aiRunning) return;
     this._aiRunning = true;
     this.aiError = null;
     const book = this.book;
@@ -513,13 +514,11 @@ export class Player {
         this.aiBusy = i;
         onUpdate?.();
         try {
-          const summary = await summarizeChapter(this.aiKey, {
-            text,
-            lang: book.lang,
-            bookTitle: book.title,
-            chapterName: chapterLabel(book.lang, i + 1, ch.title, ch.pages),
-            partial: isCur,
-          });
+          const chapterName = chapterLabel(book.lang, i + 1, ch.title, ch.pages);
+          // Con clave: Gemini. Sin clave: la IA chiquita del celular (3 frases: principio, medio y final).
+          const summary = this.aiKey
+            ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: isCur })
+            : await localAi.summarize(this.paras.slice(ch.start, upto), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 3 });
           book.aiSummaries = { ...(book.aiSummaries || {}), [i]: { text: summary, upto, full: !isCur } };
           updateBook(book.id, { aiSummaries: book.aiSummaries });
         } catch (e) {
@@ -531,6 +530,43 @@ export class Player {
     } finally {
       this.aiBusy = null;
       this._aiRunning = false;
+      onUpdate?.();
+    }
+  }
+
+  // Con clave de Gemini: una línea de resumen para cada parte de "Lo último" (se guardan para no repetir).
+  async ensureAiSectionTitles(sections, onUpdate) {
+    if (!(this.aiKey || this.aiLocal) || !this.book || this._aiSecRunning) return;
+    this._aiSecRunning = true;
+    const book = this.book;
+    try {
+      for (const sec of sections) {
+        const k = `${sec.start}-${sec.end}`;
+        if (book.aiSections?.[k]) {
+          sec.ai = book.aiSections[k];
+          continue;
+        }
+        const text = this.paras.slice(sec.start, sec.end).join(' ');
+        if (text.length < 200) continue;
+        sec.aiBusy = true;
+        onUpdate?.();
+        try {
+          const chapterName = book.lang === 'en' ? 'a passage' : 'un fragmento';
+          sec.ai = this.aiKey
+            ? await summarizeChapter(this.aiKey, { text, lang: book.lang, bookTitle: book.title, chapterName, partial: false })
+            : await localAi.summarize(this.paras.slice(sec.start, sec.end), { lang: book.lang, bookTitle: book.title, chapterName, sentences: 1 });
+          book.aiSections = { ...(book.aiSections || {}), [k]: sec.ai };
+          updateBook(book.id, { aiSections: book.aiSections });
+        } catch (e) {
+          this.aiError = e.code || 'other';
+          sec.aiBusy = false;
+          break;
+        }
+        sec.aiBusy = false;
+        onUpdate?.();
+      }
+    } finally {
+      this._aiSecRunning = false;
       onUpdate?.();
     }
   }
@@ -815,7 +851,7 @@ export class Player {
       const idx = this.chapterIndexOf(next.p);
       this._cleanupChapters(idx);
       this.prepare([idx, idx + 1]);
-      if (this.aiKey && idx > 0) this.ensureAiSummaries(idx - 1);
+      if ((this.aiKey || this.aiLocal) && idx > 0) this.ensureAiSummaries(idx - 1);
     }
     if (wasEnd && this.sleepEndOfChapter) {
       this.sleepEndOfChapter = false;
