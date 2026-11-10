@@ -36,14 +36,14 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
   // Al abrir "Todo hasta acá", pedimos a la IA los resúmenes que falten (si hay clave).
   // (Van después de declarar recap/recapAll: si no, la pantalla se rompe al abrir un libro.)
   useEffect(() => {
-    if (sheet !== 'recap' || recapTab !== 'all' || !settings.aiKey || !recapAll) return;
+    if (sheet !== 'recap' || recapTab !== 'all' || !(settings.aiKey || settings.aiLocal) || !recapAll) return;
     player.ensureAiSummaries(recapAll.chapterNumber - 1, () => setAiTick((n) => n + 1));
-  }, [sheet, recapTab, settings.aiKey, recapAll]);
+  }, [sheet, recapTab, settings.aiKey, settings.aiLocal, recapAll]);
   // "Lo último": una línea de resumen por parte (si hay clave).
   useEffect(() => {
-    if (sheet !== 'recap' || recapTab !== 'last' || !settings.aiKey || !recap?.sections?.length) return;
+    if (sheet !== 'recap' || recapTab !== 'last' || !(settings.aiKey || settings.aiLocal) || !recap?.sections?.length) return;
     player.ensureAiSectionTitles(recap.sections, () => setAiTick((n) => n + 1));
-  }, [sheet, recapTab, settings.aiKey, recap]);
+  }, [sheet, recapTab, settings.aiKey, settings.aiLocal, recap]);
   const [dragFrac, setDragFrac] = useState(null);
   const awayMs = useMemo(() => (book.progress?.listenedAt ? Date.now() - book.progress.listenedAt : 0), [book.id]);
   const [welcome, setWelcome] = useState(awayMs > DAY && (book.progress?.fraction || 0) > 0.002);

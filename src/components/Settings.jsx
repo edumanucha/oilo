@@ -5,6 +5,65 @@ import { player } from '../lib/player.js';
 import { makeT } from '../lib/i18n.js';
 import { APP_VERSION, checkForUpdate } from '../lib/updater.js';
 import { testKey } from '../lib/ai.js';
+import { localAi, LOCAL_AI_MB } from '../lib/localAi.js';
+
+// IA chiquita dentro del celular: sin clave ni cuenta. Se baja una vez (~480 MB).
+function LocalAiPanel({ t, settings, setSettings }) {
+  const [ready, setReady] = useState(null);
+  const [prog, setProg] = useState(null);
+  const [err, setErr] = useState('');
+  useEffect(() => {
+    localAi.isDownloaded().then((ok) => {
+      setReady(ok);
+      if (ok && !settings.aiLocal) setSettings({ aiLocal: true });
+    }).catch(() => setReady(false));
+  }, []);
+  const download = async () => {
+    setErr('');
+    setProg(0);
+    localAi.onDownload = (f) => setProg(f);
+    try {
+      await localAi.download();
+      setReady(true);
+      setSettings({ aiLocal: true });
+    } catch (e) {
+      console.error(e);
+      setErr(t('localAiError'));
+    }
+    localAi.onDownload = null;
+    setProg(null);
+  };
+  const remove = async () => {
+    await localAi.remove();
+    setReady(false);
+    setSettings({ aiLocal: false });
+  };
+  return (
+    <div>
+      <div className="h4">{t('localAiTitle')}</div>
+      <p className="muted" style={{ margin: '6px 0' }}>{t('localAiExplain')}</p>
+      {ready ? (
+        <div className="voice on">
+          <div className="who">
+            <b>{t('localAiReady')}</b>
+            <span>{settings.aiLocal ? t('localAiOn') : t('localAiPaused')}</span>
+          </div>
+          <button className="use" onClick={() => setSettings({ aiLocal: !settings.aiLocal })}>{settings.aiLocal ? t('aiOff') : t('aiOn')}</button>
+          <button className="icon-btn" onClick={remove} aria-label={t('removeVoice')}><Icon name="trash" /></button>
+        </div>
+      ) : prog !== null ? (
+        <div style={{ margin: '10px 0' }}>
+          <div className="row muted"><span className="spin" /> {prog >= 0.999 ? t('localAiPreparing') : t('localAiDownloading', { n: Math.round(prog * 100) })}</div>
+          <div className="progress-line" style={{ marginTop: 6 }}><i style={{ width: `${prog * 100}%` }} /></div>
+        </div>
+      ) : (
+        <button className="btn primary block" onClick={download} disabled={ready === null}><Icon name="download" /> {t('localAiDownload', { mb: LOCAL_AI_MB })}</button>
+      )}
+      {err && <p className="error">{err}</p>}
+    </div>
+  );
+}
+
 // Resúmenes con IA: el usuario pega su clave gratuita de Google AI Studio.
 function AiKeyPanel({ t, settings, setSettings }) {
   const [draft, setDraft] = useState('');
@@ -288,8 +347,11 @@ export default function Settings({ t, uiLang, setUiLang, settings, setSettings, 
       <div className="h4">{t('speed')} · {String(settings.rate).replace('.', ',')}×</div>
       <input className="scrub" type="range" min="0.5" max="3" step="0.05" value={settings.rate} onChange={(e) => setSettings({ rate: Number(e.target.value) })} />
       <div id="ai-panel" style={{ scrollMarginTop: 70 }}>
-        {/* IA local desactivada: el modelo chico (0,5 B) no resumía bien en castellano. */}
-        <AiKeyPanel t={t} settings={settings} setSettings={setSettings} />
+        <LocalAiPanel t={t} settings={settings} setSettings={setSettings} />
+        <details className="ai-adv" open={settings.aiKey ? true : undefined}>
+          <summary>{t('aiGeminiOptional')}</summary>
+          <AiKeyPanel t={t} settings={settings} setSettings={setSettings} />
+        </details>
       </div>
       <div className="h4">{t('theme')}</div>
       <div className="tog">
