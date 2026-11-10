@@ -4,6 +4,7 @@ import AddBook from './components/AddBook.jsx';
 import PlayerView from './components/PlayerView.jsx';
 import Settings from './components/Settings.jsx';
 import Splash from './components/Splash.jsx';
+import Discover from './components/Discover.jsx';
 import { listBooks, getBook, getText, getSetting, setSetting, requestPersistence, purgeOldAudio } from './lib/db.js';
 import { player } from './lib/player.js';
 import { makeT, defaultUiLang } from './lib/i18n.js';
@@ -107,6 +108,7 @@ export default function App() {
           onOpen={openBook}
           onAdd={() => setView({ name: 'add' })}
           onSettings={() => setView({ name: 'settings' })}
+          onDiscover={() => setView({ name: 'discover' })}
           onSample={async () => { const id = await addSample(uiLang); await refresh(); openBook(id); }}
           current={currentBookForList}
           playerState={pState}
@@ -143,6 +145,9 @@ export default function App() {
             setView({ name: 'library' });
           }}
         />
+      )}
+      {view.name === 'discover' && (
+        <Discover t={t} books={books} initialId={current?.book.id} onBack={() => setView({ name: 'library' })} />
       )}
       {view.name === 'settings' && (
         <Settings t={t} uiLang={uiLang} setUiLang={setUiLang} settings={settings} setSettings={setSettings} onBack={() => setView({ name: 'library' })} />

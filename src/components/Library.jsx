@@ -10,7 +10,7 @@ function greeting(t) {
   return h >= 5 && h < 13 ? t('morning') : h >= 13 && h < 20 ? t('afternoon') : t('evening');
 }
 
-export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, onSettings, onSample, current, playerState, onToggle }) {
+export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, onSettings, onSample, onDiscover, current, playerState, onToggle }) {
   const [filter, setFilter] = useState('all');
   const status = (b) => (b.progress?.finished ? 'finished' : b.progress?.fraction > 0 ? 'reading' : 'unread');
   const shown = books.filter((b) => filter === 'all' || status(b) === filter);
@@ -57,6 +57,14 @@ export default function Library({ t, books, uiLang, setUiLang, onOpen, onAdd, on
             <Icon name={playerState.playing ? 'pause' : 'play'} />
           </button>
         </div>
+      )}
+
+      {books.length > 0 && (
+        <button className="opt discover-entry" onClick={onDiscover}>
+          <Icon name="sparkle" />
+          <div className="t"><b>{t('discover')}</b><span>{t('discoverSub')}</span></div>
+          <Icon name="back" />
+        </button>
       )}
 
       {books.length > 0 && (

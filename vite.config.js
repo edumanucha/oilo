@@ -12,10 +12,10 @@ export default defineConfig({
       manifest: {
         name: 'Oílo — tus libros, contados',
         short_name: 'Oílo',
-        description: 'Convertí tus EPUB, PDF y DOCX en audiolibros. Gratis.',
+        id: './', description: 'Escuchá tus libros EPUB, PDF y Word como audiolibros. Gratis y sin internet.',
         lang: 'es',
-        theme_color: '#5b3cc4',
-        background_color: '#faf8f5',
+        theme_color: '#5d7a2e',
+        background_color: '#f4ecdc',
         display: 'standalone',
         orientation: 'portrait',
         start_url: './',

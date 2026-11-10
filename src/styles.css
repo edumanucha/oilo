@@ -264,3 +264,14 @@ svg.i.solid { fill: currentColor; stroke: none; }
 /* botón instalar */
 .install-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px; border: 1.5px dashed var(--yerba); border-radius: 6px 16px 6px 16px; color: var(--yerba-d); font-weight: 700; font-size: 15px; background: rgba(226,232,204,.45); }
 .install-btn svg.i { width: 20px; height: 20px; }
+
+/* descubrir */
+.discover-entry { border: 1.5px solid var(--line-2); border-radius: 6px 16px 6px 16px; padding: 12px; background: rgba(255,250,240,.4); }
+.discover-entry svg.i:last-child { transform: rotate(180deg); color: var(--ink-3); width: 20px; height: 20px; }
+.disc-list { display: flex; flex-direction: column; }
+.disc { display: flex; gap: 14px; align-items: center; padding: 12px 2px; border-bottom: 1px solid var(--line); color: inherit; text-decoration: none; }
+.disc .t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.disc .t b { font-family: var(--serif); font-size: 17px; line-height: 1.2; }
+.disc .why { font-family: var(--hand); font-weight: 700; font-size: 17px; color: var(--terra); line-height: 1.1; }
+.disc .free { align-self: flex-start; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: #fff; background: var(--yerba); padding: 2px 7px; border-radius: 3px 8px 3px 8px; }
+.disc > svg.i { color: var(--ink-3); width: 20px; height: 20px; }
