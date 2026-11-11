@@ -21,16 +21,31 @@ class LocalAi {
       if (!p) return;
       this.pending.delete(m.id);
       m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m.value);
+      if (!this.pending.size) this._scheduleIdle();
     };
   }
   _send(msg) {
     this.ensure();
+    clearTimeout(this._idle);
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ ...msg, id });
     });
   }
+  // La IA ocupa ~1 GB de memoria mientras está cargada: al terminar de resumir, se descarga sola.
+  _scheduleIdle() {
+    clearTimeout(this._idle);
+    this._idle = setTimeout(() => this.unloadIfIdle(), 15000);
+  }
+  unloadIfIdle() {
+    if (this.pending.size || !this.worker) return false;
+    clearTimeout(this._idle);
+    this.worker.terminate();
+    this.worker = null;
+    return true;
+  }
+  get busy() { return this.pending.size > 0; }
   isDownloaded() { return this._send({ type: 'status' }); }
   download() { return this._send({ type: 'load' }); }
   remove() { return this._send({ type: 'remove' }); }

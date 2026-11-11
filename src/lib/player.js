@@ -10,6 +10,9 @@ import { localAi } from './localAi.js';
 // Cuántas frases se generan por adelantado con la voz natural.
 // Más margen = sigue sonando aunque el celular bloqueado frene un poco la app.
 const PREFETCH = 8;
+// Celulares con 4 GB de RAM o menos: modo cuidadoso (se prepara de a un capítulo y la IA de
+// resúmenes no corre mientras suena la voz natural).
+const LOW_MEMORY = typeof navigator !== 'undefined' && navigator.deviceMemory && navigator.deviceMemory <= 4;
 
 // Un WAV de silencio en loop mantiene viva la sesión de audio con la pantalla bloqueada.
 function silentWavUrl(seconds = 2, rate = 8000) {
@@ -67,17 +70,39 @@ class SupertonicClient {
       if (!p) return;
       this.pending.delete(m.id);
       m.type === 'error' ? p.reject(new Error(m.message)) : p.resolve(m.type === 'status' ? m.downloaded : m.blob ?? true);
+      if (!this.pending.size) this._scheduleIdle();
     };
   }
   _send(msg) {
     this.ensure();
+    clearTimeout(this._idle);
     const id = ++this.seq;
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.worker.postMessage({ ...msg, id, base: new URL('.', document.baseURI).href });
     });
   }
-  synth(voice, text, lang) { return this._send({ type: 'synth', voice, text, lang }); }
+  // La voz natural ocupa ~1 GB de memoria: si queda sin uso, se descarga para que el celular no cierre la app.
+  _scheduleIdle() {
+    clearTimeout(this._idle);
+    this._idle = setTimeout(() => {
+      if (!this.pending.size && !this.keepAlive?.()) this.terminate();
+    }, 45000);
+  }
+  terminate() {
+    clearTimeout(this._idle);
+    if (!this.worker) return;
+    this.worker.terminate();
+    this.worker = null;
+    this.ep = null;
+    for (const p of this.pending.values()) p.reject(new Error('unloaded'));
+    this.pending.clear();
+  }
+  get busy() { return this.pending.size > 0; }
+  synth(voice, text, lang) {
+    localAi.unloadIfIdle(); // nunca las dos IA pesadas en memoria a la vez
+    return this._send({ type: 'synth', voice, text, lang });
+  }
   download() { return this._send({ type: 'download' }); }
   isDownloaded() { return this._send({ type: 'status' }); }
   voices() { return this._send({ type: 'voices' }); }
@@ -96,6 +121,8 @@ export class Player {
     this.piper = new PiperClient();
     this.piper.onDownload = (m) => this._emit({ download: m.total ? m.loaded / m.total : 0 });
     this.supertonic = new SupertonicClient();
+    // La voz natural se mantiene cargada solo mientras está sonando o preparando audio.
+    this.supertonic.keepAlive = () => (this.playing && this.engine === 'supertonic') || !!this._prepping;
     this.supertonic.onDownload = (m) => this._emit({ download: m.loaded });
     this.stVoice = {};
     this.listeners = new Set();
@@ -318,9 +345,17 @@ export class Player {
     this._startKeepAlive();
     this._emit();
     this._speakCurrent();
+    // Recién al dar play empezamos a preparar audio con la voz natural (en celulares con poca
+    // memoria, solo el capítulo actual).
+    if (this.engine === 'supertonic') {
+      const cur = this.chapterIndexOf(this.cursor.p);
+      this.prepare(LOW_MEMORY ? [cur] : [cur, cur + 1]);
+    }
   }
   pause() {
     this.playing = false;
+    // Al pausar, se deja de preparar audio (libera memoria), salvo que se haya pedido "Preparar libro entero".
+    if (!this._prepAllMode) this.prepQueue = [];
     this._stopKeepAlive();
     this.token++;
     this.audio.pause();
@@ -495,8 +530,19 @@ export class Player {
   }
   /* ---------- resúmenes con IA (Gemini) por capítulo ---------- */
   // Resume los capítulos hasta 'upTo' que todavía no tengan resumen (el actual, solo hasta donde vas).
+  // Antes de usar la IA de resúmenes liberamos la memoria de la voz natural (no entran las dos).
+  // En celulares con poca memoria, si está sonando la voz natural, los resúmenes esperan.
+  _makeRoomForAi() {
+    const usingLocal = this.aiLocal || !this.aiKey;
+    if (!usingLocal) return true;
+    if (this.playing && this.engine === 'supertonic') return !LOW_MEMORY;
+    if (!this.supertonic.busy) this.supertonic.terminate();
+    return true;
+  }
+
   async ensureAiSummaries(upTo, onUpdate) {
     if (!(this.aiKey || this.aiLocal) || !this.book || this._aiRunning) return;
+    if (!this._makeRoomForAi()) return;
     this._aiRunning = true;
     this.aiError = null;
     const book = this.book;
@@ -538,6 +584,7 @@ export class Player {
   // Con clave de Gemini: una línea de resumen para cada parte de "Lo último" (se guardan para no repetir).
   async ensureAiSectionTitles(sections, onUpdate) {
     if (!(this.aiKey || this.aiLocal) || !this.book || this._aiSecRunning) return;
+    if (!this._makeRoomForAi()) return;
     this._aiSecRunning = true;
     const book = this.book;
     try {
@@ -660,7 +707,8 @@ export class Player {
     this.prepQueue = [];
     const cur = this.chapterIndexOf(this.cursor?.p || 0);
     this._cleanupChapters(cur);
-    this.prepare([cur, cur + 1]);
+    // Ya no preparamos al abrir el libro: la voz natural ocupa mucha memoria y en algunos
+    // celulares eso cerraba la app. Se prepara recién cuando se da play (ver play()).
   }
   // Borra lo ya escuchado (deja el capítulo anterior por si querés volver).
   _cleanupChapters(cur) {
@@ -681,6 +729,7 @@ export class Player {
   }
   prepareAll() {
     const cur = this.chapterIndexOf(this.cursor?.p || 0);
+    this._prepAllMode = true; // el usuario pidió preparar todo: sigue aunque esté en pausa
     this.prepare(this.book.chapters.map((_, i) => i).filter((i) => i >= cur));
   }
   async _prepLoop() {
@@ -693,6 +742,7 @@ export class Player {
         const voice = this._voiceFor();
         for (const c of this._chapterCursors(i)) {
           if (!this.book || this.book.id !== bookId || this._voiceFor() !== voice || this.engine !== 'supertonic') break;
+          if (!this.prepQueue?.length) break; // se canceló (por ejemplo, al poner pausa)
           if (this.prepared?.has(this._akey(c, voice))) continue;
           // Si el reproductor está esperando una frase, le damos prioridad.
           // Si el reproductor espera una frase, o la IA está resumiendo (usan la misma placa de video), esperamos.
@@ -852,7 +902,7 @@ export class Player {
       // Empezó un capítulo nuevo: preparamos el siguiente y limpiamos lo ya escuchado.
       const idx = this.chapterIndexOf(next.p);
       this._cleanupChapters(idx);
-      this.prepare([idx, idx + 1]);
+      this.prepare(LOW_MEMORY ? [idx] : [idx, idx + 1]);
       if ((this.aiKey || this.aiLocal) && idx > 0) this.ensureAiSummaries(idx - 1);
     }
     if (wasEnd && this.sleepEndOfChapter) {
@@ -903,3 +953,5 @@ export class Player {
 }
 
 export const player = new Player();
+// Solo en desarrollo: acceso al reproductor real para depurar (no se incluye en la versión publicada).
+if (import.meta.env?.DEV && typeof window !== 'undefined') window.__oiloPlayer = player;
