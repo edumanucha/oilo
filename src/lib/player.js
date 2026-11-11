@@ -10,6 +10,9 @@ import { localAi } from './localAi.js';
 // Cuántas frases se generan por adelantado con la voz natural.
 // Más margen = sigue sonando aunque el celular bloqueado frene un poco la app.
 const PREFETCH = 8;
+// Frases que se preparan por delante mientras se escucha (~2 minutos de audio).
+const AHEAD_ITEMS = 12;
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Celulares con 4 GB de RAM o menos: modo cuidadoso (se prepara de a un capítulo y la IA de
 // resúmenes no corre mientras suena la voz natural).
 const LOW_MEMORY = typeof navigator !== 'undefined' && navigator.deviceMemory && navigator.deviceMemory <= 4;
@@ -227,6 +230,7 @@ export class Player {
     });
     this.totalChars = acc;
     this._ccache = new Map();
+    this._prepAllMode = false;
     this.prepQueue = [];
     this._updateMetadata();
     this._emit();
@@ -732,6 +736,22 @@ export class Player {
     this._prepAllMode = true; // el usuario pidió preparar todo: sigue aunque esté en pausa
     this.prepare(this.book.chapters.map((_, i) => i).filter((i) => i >= cur));
   }
+  // Cuántas frases faltan desde lo que se está escuchando hasta la frase c (negativo si ya pasó).
+  _aheadDistance(c) {
+    const cur = this.cursor;
+    if (!cur) return 0;
+    const same = (x, y) => x.p === y.p && x.s === y.s && (x.a || null) === (y.a || null);
+    const ci = this.chapterIndexOf(cur.p);
+    const ti = this.chapterIndexOf(c.p);
+    const curList = this._chapterCursors(ci);
+    const a = Math.max(0, curList.findIndex((y) => same(y, cur)));
+    if (ti < ci) return -1;
+    if (ti === ci) return curList.findIndex((y) => same(y, c)) - a;
+    let d = curList.length - a;
+    for (let k = ci + 1; k < ti; k++) d += this._chapterCursors(k).length;
+    return d + this._chapterCursors(ti).findIndex((y) => same(y, c));
+  }
+
   async _prepLoop() {
     if (this._prepping) return;
     this._prepping = true;
@@ -744,14 +764,22 @@ export class Player {
           if (!this.book || this.book.id !== bookId || this._voiceFor() !== voice || this.engine !== 'supertonic') break;
           if (!this.prepQueue?.length) break; // se canceló (por ejemplo, al poner pausa)
           if (this.prepared?.has(this._akey(c, voice))) continue;
-          // Si el reproductor está esperando una frase, le damos prioridad.
+          // Mientras se escucha, solo preparamos ~2 minutos por delante (no capítulos enteros):
+          // la voz natural exige mucho al celular y prepararlo todo de corrido lo ponía lento.
+          if (!this._prepAllMode) {
+            if (this._aheadDistance(c) < 0) continue; // ya quedó atrás
+            while (this.prepQueue?.length && this._aheadDistance(c) > AHEAD_ITEMS) await sleep(1500);
+            if (!this.prepQueue?.length) break;
+          }
           // Si el reproductor espera una frase, o la IA está resumiendo (usan la misma placa de video), esperamos.
-          while (this.loading || this._aiRunning || this._aiSecRunning) await new Promise((r) => setTimeout(r, 300));
+          while (this.loading || this._aiRunning || this._aiSecRunning) await sleep(300);
           const text = this._textOf(c);
           if (!text) continue;
           await this._getOrMakeAudio(c, text);
           this.preparing = { chapter: i, frac: this.chapterPrepFraction(i) };
           this._emit();
+          // Un respiro entre frase y frase (más largo si la app está en segundo plano).
+          await sleep(typeof document !== 'undefined' && document.hidden ? 1500 : 400);
         }
         this.prepQueue.shift();
       }

@@ -240,7 +240,10 @@ export default function PlayerView({ t, book, paras, state, settings, setSetting
                   <button className={listTab === 'marks' ? 'on' : ''} onClick={() => setListTab('marks')}>{t('bookmarks')} ({(book.bookmarks || []).length})</button>
                 </div>
                 {listTab === 'chapters' && settings.engine === 'supertonic' && (
-                  <button className="btn block" onClick={() => player.prepareAll()}><Icon name="download" /> {t('prepAll')}</button>
+                  <>
+                    <button className="btn block" onClick={() => player.prepareAll()}><Icon name="download" /> {t('prepAll')}</button>
+                    <span className="muted tiny">{t('prepAllTip')}</span>
+                  </>
                 )}
                 {listTab === 'marks' ? (
                   (book.bookmarks || []).length ? (
